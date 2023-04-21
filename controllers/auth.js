@@ -9,9 +9,11 @@ module.exports.login = asyncHandler(async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      authToken: response.authToken,
-      email: response.email,
-      role: response.role,
+      data: {
+        authToken: response.authToken,
+        email: response.email,
+        role: response.role,
+      },
     });
   } catch (error) {
     return next(error);
@@ -39,9 +41,11 @@ module.exports.register = asyncHandler(async (req, res, next) => {
 
     res.status(201).json({
       success: true,
-      authToken: response.authToken,
-      email: response.email,
-      role: response.role,
+      data: {
+        authToken: response.authToken,
+        email: response.email,
+        role: response.role,
+      },
     });
   } catch (error) {
     return next(error);
@@ -71,9 +75,11 @@ module.exports.createPassword = asyncHandler(async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      authToken: response.authToken,
-      email: response.email,
-      role: response.role,
+      data: {
+        authToken: response.authToken,
+        email: response.email,
+        role: response.role,
+      },
     });
   } catch (error) {
     return next(error);
@@ -100,11 +106,12 @@ module.exports.me = asyncHandler(async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      email: response.email,
-      role: response.role,
-      image: response.image,
-      currencyTokens: response.currencyTokens,
-      createdAt: response.createdAt,
+      data: {
+        email: response.email,
+        role: response.role,
+        image: response.image,
+        createdAt: response.createdAt,
+      },
     });
   } catch (error) {
     return next(error);
