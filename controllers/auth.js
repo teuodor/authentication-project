@@ -2,6 +2,7 @@ const asyncHandler = require('../middlewares/async');
 const authService = require('../services/auth');
 const User = require('../models/User');
 const ErrorResponse = require("../utils/errorResponse");
+const jwt = require('jsonwebtoken');
 
 module.exports.login = asyncHandler(async (req, res, next) => {
     const { email, password } = req.body;
@@ -31,8 +32,6 @@ module.exports.logout = asyncHandler(async (req, res, next) => {
 });
 
 module.exports.register = asyncHandler(async (req, res, next) => {
-    const { email, password } = req.body;
-
     let emailExists = await User.checkEmailExists(req.body.email);
 
     if(emailExists){
@@ -54,12 +53,9 @@ module.exports.register = asyncHandler(async (req, res, next) => {
         user[field] = req.body[field]
     })
 
-    let newUser = await User.create();
-    if(!!newUser){
-        return next(new ErrorResponse('Something went wrong', 500));
-    }
+    let newUser = await User.createUser(user);
 
-    const {token} = await User.getSignedJwtToken();
+    const token = signToken(newUser.id, newUser.role, newUser.email);
 
     res.status(201).json({
       success: true,
@@ -119,3 +115,38 @@ module.exports.me = asyncHandler(async (req, res, next) => {
       },
     });
 });
+
+const signToken = async (id, role, email) => {
+    //TODO temporary solution
+
+    let newToken = jwt.sign({id, role, email}, process.env.JWT_SECRET, {
+        expiresIn: process.env.JWT_EXPIRE,
+    });
+
+    let user = await User.getUserByEmail(email);
+
+    let authTokens = user.authTokens.push({newToken});
+    User.findByIdAndUpdate(user.id, {authToken: authTokens})
+
+    return newToken;
+};
+
+const createSendToken = (user, statusCode, res, ...tempUrl) => {
+    const token = signToken(user._id);
+
+    //TODO to be discussed
+
+    // const cookieOptions = {
+    //     expires: new Date(Date.now() + process.env.JWT_COOKIE_EXPIRES_IN * 24 * 60 * 60 * 1000),
+    //     httpOnly: true
+    // }
+    //
+    // //Remove password from output
+    // user.password = undefined;
+    //
+    // if(process.env.NODE_ENV === 'production') cookieOptions.secure = true
+    //
+    // res.cookie('jwt', token, cookieOptions)
+
+    return token;
+}

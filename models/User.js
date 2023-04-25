@@ -55,13 +55,26 @@ const User = mongoose.model('User', UserSchema);
 UserSchema.pre('save', async function (next) {
     if (!this.isModified('password') || this.isNew) return next();
 
-    // this.email = this.email.toLowerCase();
+    this.email = this.email.toLowerCase();
     await this.savePassword(this.password);
     next();
 });
 
-User.checkUsernameExists = async function(userDetails) {
-    return this.create(userDetails);
+User.createUser = async function(userDetails) {
+    const newUser = await this.create(userDetails);
+    return newUser;
+}
+
+User.getUserByEmail = async function(email) {
+    return await this.findOne({email: email.toLowerCase()});
+}
+
+User.getUserByUsername = async function(username) {
+    return await this.findOne({username: username.toLowerCase()});
+}
+
+User.getUserByUserId = async function(userId) {
+    return await this.findOne({id: userId.toLowerCase()});
 }
 
 User.checkUsernameExists = async function(username) {
@@ -97,7 +110,6 @@ User.getSignedJwtToken = async function () {
       expiresIn: process.env.JWT_EXPIRE,
     }
   );
-console.log(this.authTokens);
 
   this.authTokens = this.authTokens.concat({ token });
   await this.save();
