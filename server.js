@@ -2,6 +2,7 @@ const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const mongoSanitize = require("express-mongo-sanitize");
 
 const errorHandler = require('./middlewares/error');
 
@@ -31,6 +32,8 @@ const app = express();
 app.use(express.json());
 app.use(helmet());
 app.use(cors());
+//Data sanitization against NoSQL injection
+app.use(mongoSanitize());
 
 app.use('/api/v1/auth', authRoutes);
 

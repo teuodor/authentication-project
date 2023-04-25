@@ -1,10 +1,15 @@
 const asyncHandler = require('../middlewares/async');
 const authService = require('../services/auth');
+const User = require('../models/User');
+const ErrorResponse = require("../utils/errorResponse");
 
 module.exports.login = asyncHandler(async (req, res, next) => {
     const { email, password } = req.body;
 
     const response = await authService.login(email, password);
+
+    //TODO continue here @Marian
+    const user = await User.findOne({email}).select('+password');
 
     res.status(200).json({
       success: true,
@@ -28,14 +33,39 @@ module.exports.logout = asyncHandler(async (req, res, next) => {
 module.exports.register = asyncHandler(async (req, res, next) => {
     const { email, password } = req.body;
 
-    const response = await authService.register(email, password);
+    let emailExists = await User.checkEmailExists(req.body.email);
+
+    if(emailExists){
+        return next(new ErrorResponse('Username or email is already used', 400));
+    }
+
+    //This allowedField functionality will be useful when we will have more fields
+    const allowedFields = ['username', 'email', 'password'];
+
+    // create users with default fields
+    let user = {
+        image: null,
+        role: 'user',
+        otp: null,
+        authTokens: []
+    }
+    // add fields from request body
+    allowedFields.forEach(field => {
+        user[field] = req.body[field]
+    })
+
+    let newUser = await User.create();
+    if(!!newUser){
+        return next(new ErrorResponse('Something went wrong', 500));
+    }
+
+    const {token} = await User.getSignedJwtToken();
 
     res.status(201).json({
       success: true,
       data: {
-        authToken: response.authToken,
-        email: response.email,
-        role: response.role,
+        authToken: token,
+        newUser
       },
     });
 });

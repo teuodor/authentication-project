@@ -50,25 +50,46 @@ const UserSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-UserSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) {
-    next();
-  }
+const User = mongoose.model('User', UserSchema);
 
-  await this.savePassword(this.password);
+UserSchema.pre('save', async function (next) {
+    if (!this.isModified('password') || this.isNew) return next();
+
+    // this.email = this.email.toLowerCase();
+    await this.savePassword(this.password);
+    next();
 });
 
-UserSchema.methods.savePassword = async function (password) {
+User.checkUsernameExists = async function(userDetails) {
+    return this.create(userDetails);
+}
+
+User.checkUsernameExists = async function(username) {
+    const user = await this.findOne({username: username.toLowerCase()});
+    return !!user;
+};
+
+User.checkEmailExists = async function(email) {
+    const user = await this.findOne({email: email.toLowerCase()});
+    return !!user;
+};
+
+User.checkUserIdExists = async function(username) {
+    const id = await this.findOne({id: id});
+    return !!id;
+};
+
+User.savePassword = async function (password) {
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(password, salt);
 };
 
-UserSchema.methods.validPassword = async function (candidatePassword) {
+User.validPassword = async function (candidatePassword) {
   const result = await bcrypt.compare(candidatePassword, this.password);
   return result;
 };
 
-UserSchema.methods.getSignedJwtToken = async function () {
+User.getSignedJwtToken = async function () {
   const token = jwt.sign(
     { id: this._id, role: this.role, email: this.email },
     process.env.JWT_SECRET,
@@ -76,6 +97,7 @@ UserSchema.methods.getSignedJwtToken = async function () {
       expiresIn: process.env.JWT_EXPIRE,
     }
   );
+console.log(this.authTokens);
 
   this.authTokens = this.authTokens.concat({ token });
   await this.save();
@@ -83,7 +105,7 @@ UserSchema.methods.getSignedJwtToken = async function () {
   return { token };
 };
 
-UserSchema.methods.generateOTP = async function () {
+User.generateOTP = async function () {
   const secret = speakeasy.generateSecret();
 
   this.twoFactorSecret = secret.base32;
@@ -98,7 +120,7 @@ UserSchema.methods.generateOTP = async function () {
   return token;
 };
 
-UserSchema.methods.verifyOTP = async function (otp) {
+User.verifyOTP = async function (otp) {
   return speakeasy.totp.verify({
     secret: this.twoFactorSecret,
     encoding: 'base32',
@@ -108,4 +130,4 @@ UserSchema.methods.verifyOTP = async function (otp) {
   });
 };
 
-module.exports = mongoose.model('User', UserSchema);
+module.exports = User;
