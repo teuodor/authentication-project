@@ -119,14 +119,23 @@ module.exports.me = asyncHandler(async (req, res, next) => {
 const signToken = async (id, role, email) => {
     //TODO temporary solution
 
-    let newToken = jwt.sign({id, role, email}, process.env.JWT_SECRET, {
+    let newToken = await jwt.sign({id, role, email}, process.env.JWT_SECRET, {
         expiresIn: process.env.JWT_EXPIRE,
     });
+
+    console.log('The token')
+    console.log(typeof newToken);
 
     let user = await User.getUserByEmail(email);
 
     let authTokens = user.authTokens.push({newToken});
-    User.findByIdAndUpdate(user.id, {authToken: authTokens})
+
+    let newUser = await User.findByIdAndUpdate(user.id, {authToken: authTokens}, {new: true}).then(updatedUser => {
+        console.log('Updated User')
+        console.log(updatedUser)
+    }).catch(err => {
+        console.log(err)
+    })
 
     return newToken;
 };

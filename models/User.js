@@ -26,14 +26,7 @@ const UserSchema = new mongoose.Schema(
         'Please add a valid password',
       ],
     },
-    authTokens: [
-      {
-        token: {
-          type: String,
-          required: true,
-        },
-      },
-    ],
+    authTokens: [],
     role: {
       type: String,
       enum: [roles.ADMIN, roles.USER],
