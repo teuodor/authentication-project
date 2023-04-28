@@ -7,17 +7,24 @@ const jwt = require('jsonwebtoken');
 module.exports.login = asyncHandler(async (req, res, next) => {
     const { email, password } = req.body;
 
-    const response = await authService.login(email, password);
+    const user = await User.getUserByEmail(email)
 
-    //TODO continue here @Marian
-    const user = await User.findOne({email}).select('+password');
+    if (!user) {
+        throw new ErrorResponse('User not found', 404);
+    }
+
+    const passwordIsCorrect = await User.correctPassword(password, user.password);
+
+    if (!passwordIsCorrect) {
+        throw new ErrorResponse('Invalid credentials', 401);
+    }
+
+    const token = await signToken(user.id, user.role, user.email);
 
     res.status(200).json({
       success: true,
       data: {
-        authToken: response.authToken,
-        email: response.email,
-        role: response.role,
+        authToken: token,
       },
     });
 });
@@ -35,9 +42,10 @@ module.exports.register = asyncHandler(async (req, res, next) => {
     let emailExists = await User.checkEmailExists(req.body.email);
 
     if(emailExists){
-        return next(new ErrorResponse('Username or email is already used', 400));
+        return next(new ErrorResponse('Email is already used', 400));
     }
 
+    req.body.email = req.body.email.toLowerCase()
     //This allowedField functionality will be useful when we will have more fields
     const allowedFields = ['username', 'email', 'password'];
 
@@ -55,7 +63,7 @@ module.exports.register = asyncHandler(async (req, res, next) => {
 
     let newUser = await User.createUser(user);
 
-    const token = signToken(newUser.id, newUser.role, newUser.email);
+    const token = await signToken(newUser.id, newUser.role, newUser.email);
 
     res.status(201).json({
       success: true,
@@ -123,19 +131,13 @@ const signToken = async (id, role, email) => {
         expiresIn: process.env.JWT_EXPIRE,
     });
 
-    console.log('The token')
-    console.log(typeof newToken);
 
     let user = await User.getUserByEmail(email);
+    console.log(user);
+    let authTokens = user.authTokens;
+    authTokens.push({token: newToken})
 
-    let authTokens = user.authTokens.push({newToken});
-
-    let newUser = await User.findByIdAndUpdate(user.id, {authToken: authTokens}, {new: true}).then(updatedUser => {
-        console.log('Updated User')
-        console.log(updatedUser)
-    }).catch(err => {
-        console.log(err)
-    })
+    let newUser = await User.findByIdAndUpdate(user.id, {authTokens: authTokens});
 
     return newToken;
 };

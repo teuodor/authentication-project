@@ -17,7 +17,7 @@ module.exports.login = async (email, password) => {
     throw new ErrorResponse('User not found', 404);
   }
 
-  const isMatch = await user.validPassword(password);
+  const isMatch = await user.correctPassword(password);
 
   if (!isMatch) {
     throw new ErrorResponse('Invalid credentials', 401);

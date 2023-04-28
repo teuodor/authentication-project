@@ -43,23 +43,38 @@ const UserSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-const User = mongoose.model('User', UserSchema);
 
+//Mongoose hooks
 UserSchema.pre('save', async function (next) {
-    if (!this.isModified('password') || this.isNew) return next();
+    if (!this.isModified('password')) return next();
 
     this.email = this.email.toLowerCase();
-    await this.savePassword(this.password);
-    next();
+    await this.setPassword(this.password);
+    next()
 });
 
-User.createUser = async function(userDetails) {
-    const newUser = await this.create(userDetails);
-    return newUser;
+//User schema declaration
+const User = mongoose.model('User', UserSchema);
+
+//Password methods
+//TODO remove savePassword
+User.savePassword = async function (password) {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(password, salt);
+};
+
+User.prototype.setPassword = async function (password) {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(password, salt);
 }
 
+User.correctPassword = async function (candidatePassword, userPassword) {
+    return await bcrypt.compare(candidatePassword, userPassword);
+};
+
+//User Retrieval Functions
 User.getUserByEmail = async function(email) {
-    return await this.findOne({email: email.toLowerCase()});
+    return await this.findOne({email: email.toLowerCase()}).select('+password');
 }
 
 User.getUserByUsername = async function(username) {
@@ -80,21 +95,18 @@ User.checkEmailExists = async function(email) {
     return !!user;
 };
 
-User.checkUserIdExists = async function(username) {
-    const id = await this.findOne({id: id});
+User.checkUserIdExists = async function(userId) {
+    const id = await this.findOne({id: userId});
     return !!id;
 };
 
-User.savePassword = async function (password) {
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(password, salt);
-};
+//Crud functions
+User.createUser = async function(userDetails) {
+    const newUser = await this.create(userDetails);
+    return newUser;
+}
 
-User.validPassword = async function (candidatePassword) {
-  const result = await bcrypt.compare(candidatePassword, this.password);
-  return result;
-};
-
+//JWT functions
 User.getSignedJwtToken = async function () {
   const token = jwt.sign(
     { id: this._id, role: this.role, email: this.email },
