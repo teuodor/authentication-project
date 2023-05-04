@@ -4,6 +4,7 @@ const fileUpload = require('express-fileupload');
 const cors = require('cors');
 const helmet = require("helmet");
 const authRoutes = require("./routes/auth");
+const userRouter = require("./routes/user");
 const errorHandler = require("./middlewares/error");
 const mongoSanitize = require("express-mongo-sanitize");
 const ErrorResponse = require("./utils/errorResponse");
@@ -22,6 +23,7 @@ app.use(cors());
 app.use(mongoSanitize());
 
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/users', userRouter);
 
 app.use(errorHandler);
 

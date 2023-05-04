@@ -4,7 +4,6 @@ const bcrypt = require('bcryptjs');
 const speakeasy = require('speakeasy');
 
 const roles = require('../constants/roles');
-const { IMAGE } = require('../constants/user');
 
 const UserSchema = new mongoose.Schema(
   {
@@ -33,7 +32,9 @@ const UserSchema = new mongoose.Schema(
       default: roles.USER,
       required: true,
     },
-    image: { type: String, default: IMAGE },
+    photo: { type: String,
+        default: null
+    },
     otp: { type: String },
     twoFactorSecret: String,
     resetPassword: {
@@ -51,6 +52,21 @@ UserSchema.pre('save', async function (next) {
     this.email = this.email.toLowerCase();
     await this.setPassword(this.password);
     next()
+});
+
+UserSchema.post(['findOne', 'findById', 'find'], function (docs) {
+    if (Array.isArray(docs)) {
+        //If docs is array it means is triggered by 'find' and return an array of docs
+        docs.forEach(function(doc) {
+            if (doc && !doc.photo) {
+                doc.photo = 'path/myFile.png';
+            }
+        });
+    } else {
+        if (docs && !docs.photo) {
+            docs.photo = 'path/myFile.png';
+        }
+    }
 });
 
 //User schema declaration
@@ -73,6 +89,10 @@ User.correctPassword = async function (candidatePassword, userPassword) {
 };
 
 //User Retrieval Functions
+//TODO temporary
+User.getAllUsers = async function(){
+    return await this.find({});
+}
 User.getUserByEmail = async function(email) {
     return await this.findOne({email: email.toLowerCase()}).select('+password');
 }
@@ -82,7 +102,7 @@ User.getUserByUsername = async function(username) {
 }
 
 User.getUserByUserId = async function(userId) {
-    return await this.findOne({id: userId.toLowerCase()});
+    return await this.findOne({_id: userId});
 }
 
 User.checkUsernameExists = async function(username) {
@@ -96,7 +116,7 @@ User.checkEmailExists = async function(email) {
 };
 
 User.checkUserIdExists = async function(userId) {
-    const id = await this.findOne({id: userId});
+    const id = await this.findOne({_id: userId});
     return !!id;
 };
 
@@ -104,6 +124,11 @@ User.checkUserIdExists = async function(userId) {
 User.createUser = async function(userDetails) {
     const newUser = await this.create(userDetails);
     return newUser;
+}
+User.changePhoto = async function(userId, path){
+    const user = await User.findById(userId);
+    user.photo = path;
+    await user.save();
 }
 
 //JWT functions

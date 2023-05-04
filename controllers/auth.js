@@ -110,20 +110,6 @@ module.exports.changePassword = asyncHandler(async (req, res, next) => {
     });
 });
 
-module.exports.me = asyncHandler(async (req, res, next) => {
-    const response = await authService.me(req.userId);
-
-    res.status(200).json({
-      success: true,
-      data: {
-        email: response.email,
-        role: response.role,
-        image: response.image,
-        createdAt: response.createdAt,
-      },
-    });
-});
-
 const signToken = async (id, role, email) => {
     //TODO temporary solution
 
@@ -133,7 +119,6 @@ const signToken = async (id, role, email) => {
 
 
     let user = await User.getUserByEmail(email);
-    console.log(user);
     let authTokens = user.authTokens;
     authTokens.push({token: newToken})
 

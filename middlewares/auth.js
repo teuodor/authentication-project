@@ -2,6 +2,9 @@ const jwt = require('jsonwebtoken');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('./async');
 const User = require('../models/User');
+const decodeToken = require("../utils/decodeToken");
+const log = require('../utils/logsChalk')
+
 
 module.exports.access = (req, res, next) => {
   const accessKey = process.env.ACCESS_KEY;
@@ -14,22 +17,8 @@ module.exports.access = (req, res, next) => {
 };
 
 module.exports.protect = asyncHandler(async (req, res, next) => {
-  let token;
 
-  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-    token = req.headers.authorization.split(' ')[1];
-  }
-
-  if (!token) {
-    return next(new ErrorResponse('You are not logged in!', 401));
-  }
-
-  const decoded = await jwt.verify(token, process.env.JWT_SECRET);
-
-  if(!decoded){
-    return next(new ErrorResponse('Token invalid or something went wrong.', 401));
-  }
-
+  let decoded = await decodeToken(req, res, next);
   // Check if users exist
   const currentUser = await User.checkUserIdExists(decoded.id);
   if (!currentUser) {
@@ -43,7 +32,11 @@ module.exports.protect = asyncHandler(async (req, res, next) => {
   // }
 
   //The current user details are now stored in the request object
-  req.user = currentUser
+  req.user = {
+    id: decoded.id,
+    email: decoded.email,
+    role: decoded.role,
+  }
   next()
 });
 
