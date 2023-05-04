@@ -2,6 +2,9 @@ const jwt = require('jsonwebtoken');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('./async');
 const User = require('../models/User');
+const decodeToken = require("../utils/decodeToken");
+const log = require('../utils/logsChalk')
+
 
 module.exports.access = (req, res, next) => {
   const accessKey = process.env.ACCESS_KEY;
@@ -14,39 +17,43 @@ module.exports.access = (req, res, next) => {
 };
 
 module.exports.protect = asyncHandler(async (req, res, next) => {
-  let token;
 
-  if (
-    req.headers.authorization &&
-    req.headers.authorization.startsWith('Bearer')
-  ) {
-    token = req.headers.authorization.split(' ')[1];
-  } else {
-    next(new ErrorResponse('Not authorized to access this route', 401));
+  let decoded = await decodeToken(req, res, next);
+  // Check if users exist
+  const currentUser = await User.checkUserIdExists(decoded.id);
+  if (!currentUser) {
+    return next(new ErrorResponse('The user no longer exist', 401));
   }
 
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.userId = decoded.id;
-    req.userRole = decoded.role;
-    req.userEmail = decoded.email;
+  //TODO check if current user is active
 
-    const loggedInUser = await User.findById(req.userId);
-    if (loggedInUser.authTokens.some((tkn) => tkn.token === token)) {
-      next();
-    } else {
-      next(new ErrorResponse('Not authorized to access this route', 401));
-    }
-  } catch (error) {
-    next(new ErrorResponse('Not authorized to access this route', 401));
+  // if(!currentUser['active']){
+  //   return next(new ErrorResponse('User is disabled', 401));
+  // }
+
+  //The current user details are now stored in the request object
+  req.user = {
+    id: decoded.id,
+    email: decoded.email,
+    role: decoded.role,
   }
+  next()
 });
 
-module.exports.authorize = (...roles) => {
+exports.restrictTo = (...roles) => {
   return (req, res, next) => {
-    const userRole = req.userRole;
-    if (userRole && roles.includes(userRole)) {
-      next();
+    if (roles.includes(req.user.role)) {
+      return next(new ErrorResponse('You don\'t have access here', 403));
     }
+    next();
+  };
+};
+
+module.exports.authorizeTo = (...roles) => {
+  return (req, res, next) => {
+    if (!roles.includes(req.user.role)) {
+      return next(new ErrorResponse('You don\'t have access here', 403));
+    }
+    next();
   };
 };

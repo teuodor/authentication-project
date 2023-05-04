@@ -1,59 +1,80 @@
 const asyncHandler = require('../middlewares/async');
 const authService = require('../services/auth');
+const User = require('../models/User');
+const ErrorResponse = require("../utils/errorResponse");
+const jwt = require('jsonwebtoken');
 
 module.exports.login = asyncHandler(async (req, res, next) => {
-  try {
     const { email, password } = req.body;
 
-    const response = await authService.login(email, password);
+    const user = await User.getUserByEmail(email)
+
+    if (!user) {
+        throw new ErrorResponse('User not found', 404);
+    }
+
+    const passwordIsCorrect = await User.correctPassword(password, user.password);
+
+    if (!passwordIsCorrect) {
+        throw new ErrorResponse('Invalid credentials', 401);
+    }
+
+    const token = await signToken(user.id, user.role, user.email);
 
     res.status(200).json({
       success: true,
       data: {
-        authToken: response.authToken,
-        email: response.email,
-        role: response.role,
+        authToken: token,
       },
     });
-  } catch (error) {
-    return next(error);
-  }
 });
 
 module.exports.logout = asyncHandler(async (req, res, next) => {
-  try {
     await authService.logout(
       req.userId,
       req.headers.authorization.split(' ')[1]
     );
 
     res.status(200).json({ success: true });
-  } catch (error) {
-    return next(error);
-  }
 });
 
 module.exports.register = asyncHandler(async (req, res, next) => {
-  try {
-    const { email, password } = req.body;
+    let emailExists = await User.checkEmailExists(req.body.email);
 
-    const response = await authService.register(email, password);
+    if(emailExists){
+        return next(new ErrorResponse('Email is already used', 400));
+    }
+
+    req.body.email = req.body.email.toLowerCase()
+    //This allowedField functionality will be useful when we will have more fields
+    const allowedFields = ['username', 'email', 'password'];
+
+    // create users with default fields
+    let user = {
+        image: null,
+        role: 'user',
+        otp: null,
+        authTokens: []
+    }
+    // add fields from request body
+    allowedFields.forEach(field => {
+        user[field] = req.body[field]
+    })
+
+    let newUser = await User.createUser(user);
+
+    const token = await signToken(newUser.id, newUser.role, newUser.email);
 
     res.status(201).json({
       success: true,
       data: {
-        authToken: response.authToken,
-        email: response.email,
-        role: response.role,
+        authToken: token,
+        newUser
       },
     });
-  } catch (error) {
-    return next(error);
-  }
 });
 
 module.exports.resetPassword = asyncHandler(async (req, res, next) => {
-  try {
     const { email } = req.body;
 
     const response = await authService.resetPassword(email);
@@ -62,13 +83,9 @@ module.exports.resetPassword = asyncHandler(async (req, res, next) => {
       success: true,
       otp: response,
     });
-  } catch (error) {
-    return next(error);
-  }
 });
 
 module.exports.createPassword = asyncHandler(async (req, res, next) => {
-  try {
     const { token, password } = req.body;
 
     const response = await authService.createPassword(token, password);
@@ -81,13 +98,9 @@ module.exports.createPassword = asyncHandler(async (req, res, next) => {
         role: response.role,
       },
     });
-  } catch (error) {
-    return next(error);
-  }
 });
 
 module.exports.changePassword = asyncHandler(async (req, res, next) => {
-  try {
     const { oldPassword, newPassword } = req.body;
 
     await authService.changePassword(oldPassword, newPassword, req.userId);
@@ -95,25 +108,41 @@ module.exports.changePassword = asyncHandler(async (req, res, next) => {
     res.status(200).json({
       success: true,
     });
-  } catch (error) {
-    return next(error);
-  }
 });
 
-module.exports.me = asyncHandler(async (req, res, next) => {
-  try {
-    const response = await authService.me(req.userId);
+const signToken = async (id, role, email) => {
+    //TODO temporary solution
 
-    res.status(200).json({
-      success: true,
-      data: {
-        email: response.email,
-        role: response.role,
-        image: response.image,
-        createdAt: response.createdAt,
-      },
+    let newToken = await jwt.sign({id, role, email}, process.env.JWT_SECRET, {
+        expiresIn: process.env.JWT_EXPIRE,
     });
-  } catch (error) {
-    return next(error);
-  }
-});
+
+
+    let user = await User.getUserByEmail(email);
+    let authTokens = user.authTokens;
+    authTokens.push({token: newToken})
+
+    let newUser = await User.findByIdAndUpdate(user.id, {authTokens: authTokens});
+
+    return newToken;
+};
+
+const createSendToken = (user, statusCode, res, ...tempUrl) => {
+    const token = signToken(user._id);
+
+    //TODO to be discussed
+
+    // const cookieOptions = {
+    //     expires: new Date(Date.now() + process.env.JWT_COOKIE_EXPIRES_IN * 24 * 60 * 60 * 1000),
+    //     httpOnly: true
+    // }
+    //
+    // //Remove password from output
+    // user.password = undefined;
+    //
+    // if(process.env.NODE_ENV === 'production') cookieOptions.secure = true
+    //
+    // res.cookie('jwt', token, cookieOptions)
+
+    return token;
+}
