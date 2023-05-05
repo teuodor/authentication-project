@@ -19,6 +19,9 @@ app.use(cors());
 app.use(fileUpload());
 app.use(cors());
 
+//Serving static files
+app.use('/media', express.static(__dirname + '/media'));
+
 //Data sanitization against NoSQL injection
 app.use(mongoSanitize());
 

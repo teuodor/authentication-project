@@ -6,11 +6,6 @@ async function uploadProfilePicture(req, res, next, userId){
     let profilePhotoName = 'profilePicture.png'
     let profilePhotoPath = `./media/users/${userId}`;
 
-    // Check if any file was uploaded
-    if (!req.files || Object.keys(req.files).length === 0) {
-        return next(new ErrorResponse('No file uploaded', 400));
-    }
-
     //Check if user have already a profile picture
     // let userPhoto = await checkIfFileExists(profilePhotoPath, profilePhotoName);
 

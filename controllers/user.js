@@ -7,10 +7,23 @@ const uploadFeatures = require("../utils/upload");
 const userFeatures = require("./../utils/users");
 const jwt = require('jsonwebtoken');
 const log = require("../utils/logsChalk");
+const path = require("path");
 
 exports.uploadUserPhoto = asyncHandler(async (req, res, next) => {
     let userId = req.user.id;
-    // let fileName = userFeatures.generatePassword(3);
+
+    // check if only one file is uploaded and is named photo
+    if (!req.files || Object.keys(req.files).length !== 1 || !req.files.photo) {
+        return next(new ErrorResponse('Please upload one photo', 400));
+    }
+
+    const userPhoto = req.files.photo;
+    const fileExtension = path.extname(userPhoto.name);
+
+    const acceptedExtensions = ['.jpg', '.jpeg', '.png'];
+    if (!acceptedExtensions.includes(fileExtension)) {
+        return next(new ErrorResponse('Invalid file type. Please upload a photo with .jpg .jpeg or .png format.', 400));
+    }
 
     let photoPath = await uploadFeatures.uploadProfilePicture(req, res, next, userId)
     await User.changePhoto(userId, photoPath);
