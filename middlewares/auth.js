@@ -2,9 +2,8 @@ const jwt = require('jsonwebtoken');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('./async');
 const User = require('../models/User');
-const decodeToken = require("../utils/decodeToken");
-const log = require('../utils/logsChalk')
-
+const decodeToken = require('../utils/decodeToken');
+const log = require('../utils/logsChalk');
 
 module.exports.access = (req, res, next) => {
   const accessKey = process.env.ACCESS_KEY;
@@ -17,10 +16,9 @@ module.exports.access = (req, res, next) => {
 };
 
 module.exports.protect = asyncHandler(async (req, res, next) => {
-
   let decoded = await decodeToken(req, res, next);
   // Check if users exist
-  const currentUser = await User.checkUserIdExists(decoded.id);
+  const currentUser = await User.checkIdExists(decoded.id);
   if (!currentUser) {
     return next(new ErrorResponse('The user no longer exist', 401));
   }
@@ -36,14 +34,14 @@ module.exports.protect = asyncHandler(async (req, res, next) => {
     id: decoded.id,
     email: decoded.email,
     role: decoded.role,
-  }
-  next()
+  };
+  next();
 });
 
 exports.restrictTo = (...roles) => {
   return (req, res, next) => {
     if (roles.includes(req.user.role)) {
-      return next(new ErrorResponse('You don\'t have access here', 403));
+      return next(new ErrorResponse("You don't have access here", 403));
     }
     next();
   };
@@ -52,7 +50,7 @@ exports.restrictTo = (...roles) => {
 module.exports.authorizeTo = (...roles) => {
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {
-      return next(new ErrorResponse('You don\'t have access here', 403));
+      return next(new ErrorResponse("You don't have access here", 403));
     }
     next();
   };

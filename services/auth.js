@@ -1,61 +1,6 @@
 const ErrorResponse = require('../utils/errorResponse');
 const User = require('../models/User');
 
-module.exports.login = async (email, password) => {
-  if (!email) {
-    throw new ErrorResponse('Please provide an email', 400);
-  }
-  if (!password) {
-    throw new ErrorResponse('Please provide a password', 400);
-  }
-
-  const user = await User.findOne({ email: email.toLowerCase() })
-    .select('+password')
-    .setOptions({ sanitizeFilter: true });
-
-  if (!user) {
-    throw new ErrorResponse('User not found', 404);
-  }
-
-  const isMatch = await user.correctPassword(password);
-
-  if (!isMatch) {
-    throw new ErrorResponse('Invalid credentials', 401);
-  }
-
-  const { token } = await user.getSignedJwtToken();
-
-  const response = {
-    authToken: token,
-    email: user.email,
-    role: user.role,
-  };
-
-  return response;
-};
-
-module.exports.logout = async (userId, token) => {
-  if (!userId) {
-    throw new ErrorResponse('Please provide user id', 400);
-  }
-  if (!token) {
-    throw new ErrorResponse('Please provide an auth token', 400);
-  }
-
-  const user = await User.findById(userId);
-  if (!user) {
-    throw new ErrorResponse('User not found', 404);
-  }
-
-  const oldUserTokensLength = user.authTokens.length;
-  user.authTokens = user.authTokens.filter((t) => t.token !== token);
-  const newUser = await user.save();
-
-  if (newUser.authTokens.length === oldUserTokensLength) {
-    throw new ErrorResponse('Token cannot be removed', 401);
-  }
-};
-
 module.exports.register = async (email, password) => {
   if (!email) {
     throw new ErrorResponse('Please provide an email', 400);
