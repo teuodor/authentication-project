@@ -25,7 +25,7 @@ const UserSchema = new mongoose.Schema(
         'Please add a valid password',
       ],
     },
-    authTokens: [],
+    authTokens: { type: [String], select: false },
     role: {
       type: String,
       enum: [roles.ADMIN, roles.USER],
@@ -33,13 +33,15 @@ const UserSchema = new mongoose.Schema(
       required: true,
     },
     photo: { type: String, default: null },
-    otp: { type: String },
-    twoFactorSecret: String,
+    otp: { type: String, select: false },
+    twoFactorSecret: { type: String, select: false },
     resetPassword: {
       type: Boolean,
+      default: false,
+      select: false,
     },
   },
-  { timestamps: true }
+  { timestamps: true, versionKey: false }
 );
 
 //Mongoose hooks
@@ -139,25 +141,32 @@ User.getAllUsers = async function () {
   return await this.find();
 };
 User.getByEmail = async function (email) {
-  return await this.findOne({ email: email.toLowerCase() }).select('+password');
+  return await this.findOne({ email: email.toLowerCase() }).select(
+    '+password +authTokens'
+  );
 };
 
 User.getByUsername = async function (username) {
   return await this.findOne({ username: username.toLowerCase() });
 };
 
-User.getById = async function (userId, withPassword) {
+User.getByIdwithPassword = async function (userId, withPassword = false) {
   return withPassword
     ? await this.findById(userId).select('+password')
     : await this.findById(userId);
 };
 
-User.getByFields = async function (fields, withPassword) {
-  return withPassword
-    ? await this.findOne(fields).select('+password')
-    : await this.findOne(fields);
+User.getByIdwithAuthTokens = async function (userId, withAuthTokens = false) {
+  return withAuthTokens
+    ? await this.findById(userId).select('+authTokens')
+    : await this.findById(userId);
 };
 
+User.getForCreatingPassword = async function (otp) {
+  return await this.findOne({ resetPassword: true, otp }).select(
+    '+password +authTokens +otp +resetPassword +twoFactorSecret'
+  );
+};
 User.checkUsernameExists = async function (username) {
   const user = await this.exists({ username: username.toLowerCase() });
   return !!user;

@@ -3,7 +3,6 @@ const asyncHandler = require('../middlewares/async');
 const User = require('../models/User');
 const ErrorResponse = require('../utils/errorResponse');
 const sendEmail = require('../utils/sendEmail');
-const { formatUser } = require('../utils/formatters');
 
 module.exports.login = asyncHandler(async (req, res, next) => {
   const { email, password } = req.body;
@@ -21,11 +20,18 @@ module.exports.login = asyncHandler(async (req, res, next) => {
   }
 
   const authToken = await user.getSignedJwtToken();
+  const responseUser = user.toObject();
+  const properties = ['authTokens', 'password'];
+
+  for (let i = 0; i < properties.length; i++) {
+    responseUser[properties[i]] = undefined;
+  }
 
   res.status(200).json({
     success: true,
     data: {
-      user: { ...formatUser(user), authToken },
+      ...responseUser,
+      authToken,
     },
   });
 });
@@ -34,7 +40,7 @@ module.exports.logout = asyncHandler(async (req, res, next) => {
   const userId = req.user.id;
   const authToken = req.headers.authorization.split(' ')[1];
 
-  const user = await User.getById(userId);
+  const user = await User.getByIdwithAuthTokens(userId, true);
 
   if (!user) {
     throw new ErrorResponse('User not found', 404);
@@ -74,19 +80,27 @@ module.exports.register = asyncHandler(async (req, res, next) => {
     authTokens: [],
   };
   // add fields from request body
-  allowedFields.forEach((field) => {
-    user[field] = req.body[field];
-  });
+  for (let i = 0; i < allowedFields.length; i++) {
+    user[allowedFields[i]] = req.body[allowedFields[i]];
+  }
 
   let newUser = await User.createUser(user);
   newUser.photo = 'path/myFile.png';
 
   const authToken = await newUser.getSignedJwtToken();
 
+  const responseUser = newUser.toObject();
+  const properties = ['authTokens', 'password', 'otp', 'resetPassword'];
+
+  for (let i = 0; i < properties.length; i++) {
+    responseUser[properties[i]] = undefined;
+  }
+
   res.status(201).json({
     success: true,
     data: {
-      user: { ...formatUser(newUser), authToken },
+      ...responseUser,
+      authToken,
     },
   });
 });
@@ -117,16 +131,14 @@ module.exports.resetPassword = asyncHandler(async (req, res, next) => {
 
   res.status(200).json({
     success: true,
+    otp,
   });
 });
 
 module.exports.createPassword = asyncHandler(async (req, res, next) => {
   const { token, password } = req.body;
 
-  const user = await User.getByFields(
-    { otp: token, resetPassword: true },
-    true
-  );
+  const user = await User.getForCreatingPassword(token);
   if (!user) {
     throw new ErrorResponse('User not found', 404);
   }
@@ -146,13 +158,18 @@ module.exports.createPassword = asyncHandler(async (req, res, next) => {
   await user.save();
 
   const authToken = await user.getSignedJwtToken();
+  const responseUser = user.toObject();
+  const properties = ['authTokens', 'password'];
+
+  for (let i = 0; i < properties.length; i++) {
+    responseUser[properties[i]] = undefined;
+  }
 
   res.status(200).json({
     success: true,
     data: {
+      ...responseUser,
       authToken,
-      email: user.email,
-      role: user.role,
     },
   });
 });
@@ -160,7 +177,7 @@ module.exports.createPassword = asyncHandler(async (req, res, next) => {
 module.exports.changePassword = asyncHandler(async (req, res, next) => {
   const { oldPassword, newPassword } = req.body;
 
-  const user = await User.getById(req.user.id, true);
+  const user = await User.getByIdwithPassword(req.user.id, true);
 
   if (!user) {
     throw new ErrorResponse('User not found', 404);

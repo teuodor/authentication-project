@@ -8,7 +8,6 @@ const userFeatures = require('./../utils/users');
 const jwt = require('jsonwebtoken');
 const log = require('../utils/logsChalk');
 const path = require('path');
-const { formatUser } = require('../utils/formatters');
 
 exports.uploadUserPhoto = asyncHandler(async (req, res, next) => {
   let userId = req.user.id;
@@ -51,18 +50,18 @@ module.exports.getAll = asyncHandler(async (req, res, next) => {
   res.status(200).json({
     success: true,
     data: {
-      users: users.map((user) => formatUser(user)),
+      users: users.map((user) => user.toObject()),
     },
   });
 });
 
 module.exports.me = asyncHandler(async (req, res, next) => {
-  const user = await User.getById(req.user.id);
+  const user = await User.findById(req.user.id);
 
   res.status(200).json({
     success: true,
     data: {
-      ...formatUser(user),
+      ...user.toObject(),
     },
   });
 });
