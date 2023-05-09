@@ -10,7 +10,7 @@ module.exports.login = asyncHandler(async (req, res, next) => {
     const user = await User.getUserByEmail(email)
 
     if (!user) {
-        throw new ErrorResponse('User not found', 404);
+        throw new ErrorResponse('User not found', 404, req);
     }
 
     const passwordIsCorrect = await User.correctPassword(password, user.password);

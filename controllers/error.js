@@ -3,6 +3,7 @@ const ErrorResponse = require('./../utils/errorResponse')
 //TODO error handling if database connection failed/ ip is not in whitelist
 const handleCastErrorDB = err =>{
     const message = `Invalid ${err.path}: ${err.value}.`;
+
     return new ErrorResponse(message, 400);
 }
 const handleDuplicateFieldsDB = err =>{
