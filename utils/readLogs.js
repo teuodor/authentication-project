@@ -4,7 +4,7 @@ const moment = require('moment');
 const { createLogger, transports, format } = require('winston');
 const DailyRotateFile = require('winston-daily-rotate-file');
 
-const logDir = 'logs/requests';
+const logDir = process.argv[2]
 
 const getLatestLogFilePath = () => {
     const currentDate = moment().format('YYYY-MM-DD');
