@@ -25,114 +25,50 @@ const UserSchema = new mongoose.Schema(
         'Please add a valid password',
       ],
     },
-    authTokens: [],
+    authTokens: { type: [String], select: false },
     role: {
       type: String,
       enum: [roles.ADMIN, roles.USER],
       default: roles.USER,
       required: true,
     },
-    photo: { type: String,
-        default: null
-    },
-    otp: { type: String },
-    twoFactorSecret: String,
+    photo: { type: String, default: null },
+    otp: { type: String, select: false },
+    twoFactorSecret: { type: String, select: false },
     resetPassword: {
       type: Boolean,
+      default: false,
+      select: false,
     },
   },
-  { timestamps: true }
+  { timestamps: true, versionKey: false }
 );
-
 
 //Mongoose hooks
 UserSchema.pre('save', async function (next) {
-    if (!this.isModified('password')) return next();
+  if (!this.isModified('password')) return next();
 
-    this.email = this.email.toLowerCase();
-    await this.setPassword(this.password);
-    next()
+  await this.setPassword(this.password);
+  next();
 });
 
 UserSchema.post(['findOne', 'findById', 'find'], function (docs) {
-    if (Array.isArray(docs)) {
-        //If docs is array it means is triggered by 'find' and return an array of docs
-        docs.forEach(function(doc) {
-            if (doc && !doc.photo) {
-                doc.photo = 'path/myFile.png';
-            }
-        });
-    } else {
-        if (docs && !docs.photo) {
-            docs.photo = 'path/myFile.png';
-        }
+  if (Array.isArray(docs)) {
+    //If docs is array it means is triggered by 'find' and return an array of docs
+    docs.forEach(function (doc) {
+      if (doc && !doc.photo) {
+        doc.photo = 'path/myFile.png';
+      }
+    });
+  } else {
+    if (docs && !docs.photo) {
+      docs.photo = 'path/myFile.png';
     }
+  }
 });
 
-//User schema declaration
-const User = mongoose.model('User', UserSchema);
-
-//Password methods
-//TODO remove savePassword
-User.savePassword = async function (password) {
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(password, salt);
-};
-
-User.prototype.setPassword = async function (password) {
-    const salt = await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(password, salt);
-}
-
-User.correctPassword = async function (candidatePassword, userPassword) {
-    return await bcrypt.compare(candidatePassword, userPassword);
-};
-
-//User Retrieval Functions
-//TODO temporary
-User.getAllUsers = async function(){
-    return await this.find({});
-}
-User.getUserByEmail = async function(email) {
-    return await this.findOne({email: email.toLowerCase()}).select('+password');
-}
-
-User.getUserByUsername = async function(username) {
-    return await this.findOne({username: username.toLowerCase()});
-}
-
-User.getUserByUserId = async function(userId) {
-    return await this.findOne({_id: userId});
-}
-
-User.checkUsernameExists = async function(username) {
-    const user = await this.findOne({username: username.toLowerCase()});
-    return !!user;
-};
-
-User.checkEmailExists = async function(email) {
-    const user = await this.findOne({email: email.toLowerCase()});
-    return !!user;
-};
-
-User.checkUserIdExists = async function(userId) {
-    const id = await this.findOne({_id: userId});
-    return !!id;
-};
-
-//Crud functions
-User.createUser = async function(userDetails) {
-    const newUser = await this.create(userDetails);
-    return newUser;
-}
-User.changePhoto = async function(userId, path){
-    const user = await User.findById(userId);
-    user.photo = path;
-    await user.save();
-}
-
 //JWT functions
-User.getSignedJwtToken = async function () {
+UserSchema.methods.getSignedJwtToken = async function () {
   const token = jwt.sign(
     { id: this._id, role: this.role, email: this.email },
     process.env.JWT_SECRET,
@@ -141,28 +77,36 @@ User.getSignedJwtToken = async function () {
     }
   );
 
-  this.authTokens = this.authTokens.concat({ token });
+  this.authTokens.push(token);
   await this.save();
-
-  return { token };
-};
-
-User.generateOTP = async function () {
-  const secret = speakeasy.generateSecret();
-
-  this.twoFactorSecret = secret.base32;
-  await this.save();
-
-  const token = speakeasy.totp({
-    secret: this.twoFactorSecret,
-    encoding: 'base32',
-    time: 7200,
-  });
 
   return token;
 };
 
-User.verifyOTP = async function (otp) {
+UserSchema.methods.filterAuthTokens = async function (authToken) {
+  this.authTokens = this.authTokens.filter((t) => t !== authToken);
+  const user = await this.save();
+  return user;
+};
+
+UserSchema.methods.generateOTP = async function () {
+  const secret = speakeasy.generateSecret();
+
+  const token = speakeasy.totp({
+    secret: secret.base32,
+    encoding: 'base32',
+    time: 7200,
+  });
+
+  this.twoFactorSecret = secret.base32;
+  this.otp = token;
+
+  await this.save();
+
+  return token;
+};
+
+UserSchema.methods.verifyOTP = async function (otp) {
   return speakeasy.totp.verify({
     secret: this.twoFactorSecret,
     encoding: 'base32',
@@ -170,6 +114,92 @@ User.verifyOTP = async function (otp) {
     window: 2,
     time: 7200,
   });
+};
+
+//User schema declaration
+const User = mongoose.model('User', UserSchema);
+
+//Password methods
+//TODO remove savePassword
+User.savePassword = async function (password) {
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(password, salt);
+};
+
+User.prototype.setPassword = async function (password) {
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(password, salt);
+};
+
+User.correctPassword = async function (candidatePassword, userPassword) {
+  return await bcrypt.compare(candidatePassword, userPassword);
+};
+
+//User Retrieval Functions
+//TODO temporary
+User.getAllUsers = async function () {
+  return await this.find();
+};
+User.getByEmail = async function (email) {
+  return await this.findOne({ email: email.toLowerCase() }).select(
+    '+password +authTokens'
+  );
+};
+
+User.getByUsername = async function (username) {
+  return await this.findOne({ username: username.toLowerCase() });
+};
+
+User.getByIdwithPassword = async function (userId, withPassword = false) {
+  return withPassword
+    ? await this.findById(userId).select('+password')
+    : await this.findById(userId);
+};
+
+User.getByIdwithAuthTokens = async function (userId, withAuthTokens = false) {
+  return withAuthTokens
+    ? await this.findById(userId).select('+authTokens')
+    : await this.findById(userId);
+};
+
+User.getForCreatingPassword = async function (otp) {
+  return await this.findOne({ resetPassword: true, otp }).select(
+    '+password +authTokens +otp +resetPassword +twoFactorSecret'
+  );
+};
+User.checkUsernameExists = async function (username) {
+  const user = await this.exists({ username: username.toLowerCase() });
+  return !!user;
+};
+
+User.checkEmailExists = async function (email) {
+  const user = await this.exists({ email: email.toLowerCase() });
+  return !!user;
+};
+
+User.checkIdExists = async function (userId) {
+  const id = await this.exists({ _id: userId });
+  return !!id;
+};
+
+//Crud functions
+User.createUser = async function (userDetails) {
+  const user = await this.create(userDetails);
+  return user;
+};
+
+User.changePhoto = async function (userId, path) {
+  const user = await User.findById(userId);
+  user.photo = path;
+  await user.save();
+};
+
+User.getByFieldAndUpdate = async function (findQuery, updateQuery) {
+  const user = await this.findOneAndUpdate(findQuery, updateQuery, {
+    new: true,
+  });
+
+  return user;
 };
 
 module.exports = User;

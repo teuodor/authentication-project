@@ -1,148 +1,227 @@
-const asyncHandler = require('../middlewares/async');
-const authService = require('../services/auth');
-const User = require('../models/User');
-const ErrorResponse = require("../utils/errorResponse");
 const jwt = require('jsonwebtoken');
+const asyncHandler = require('../middlewares/async');
+const User = require('../models/User');
+const ErrorResponse = require('../utils/errorResponse');
+const sendEmail = require('../utils/sendEmail');
 
 module.exports.login = asyncHandler(async (req, res, next) => {
-    const { email, password } = req.body;
+  const { email, password } = req.body;
 
-    const user = await User.getUserByEmail(email)
+  const user = await User.getByEmail(email);
 
-    if (!user) {
-        throw new ErrorResponse('User not found', 404);
-    }
+  if (!user) {
+    throw new ErrorResponse('User not found', 404);
+  }
 
-    const passwordIsCorrect = await User.correctPassword(password, user.password);
+  const passwordIsCorrect = await User.correctPassword(password, user.password);
 
-    if (!passwordIsCorrect) {
-        throw new ErrorResponse('Invalid credentials', 401);
-    }
+  if (!passwordIsCorrect) {
+    throw new ErrorResponse('Invalid credentials', 401);
+  }
 
-    const token = await signToken(user.id, user.role, user.email);
+  const authToken = await user.getSignedJwtToken();
+  const responseUser = user.toObject();
+  const properties = ['authTokens', 'password'];
 
-    res.status(200).json({
-      success: true,
-      data: {
-        authToken: token,
-      },
-    });
+  for (let i = 0; i < properties.length; i++) {
+    responseUser[properties[i]] = undefined;
+  }
+
+  res.status(200).json({
+    success: true,
+    data: {
+      ...responseUser,
+      authToken,
+    },
+  });
 });
 
 module.exports.logout = asyncHandler(async (req, res, next) => {
-    await authService.logout(
-      req.userId,
-      req.headers.authorization.split(' ')[1]
-    );
+  const userId = req.user.id;
+  const authToken = req.headers.authorization.split(' ')[1];
 
-    res.status(200).json({ success: true });
+  const user = await User.getByIdwithAuthTokens(userId, true);
+
+  if (!user) {
+    throw new ErrorResponse('User not found', 404);
+  }
+  const authTokensLength = user.authTokens.length;
+
+  const newUser = await user.filterAuthTokens(authToken);
+
+  if (authTokensLength === newUser.authTokens.length) {
+    throw new ErrorResponse('Token cannot be removed', 401);
+  }
+
+  res.status(200).json({ success: true });
 });
 
 module.exports.register = asyncHandler(async (req, res, next) => {
-    let emailExists = await User.checkEmailExists(req.body.email);
+  if (!req.body.email) {
+    return next(new ErrorResponse('Provide an email', 400));
+  }
 
-    if(emailExists){
-        return next(new ErrorResponse('Email is already used', 400));
-    }
+  req.body.email = req.body.email.toLowerCase();
 
-    req.body.email = req.body.email.toLowerCase()
-    //This allowedField functionality will be useful when we will have more fields
-    const allowedFields = ['username', 'email', 'password'];
+  let emailExists = await User.checkEmailExists(req.body.email);
 
-    // create users with default fields
-    let user = {
-        image: null,
-        role: 'user',
-        otp: null,
-        authTokens: []
-    }
-    // add fields from request body
-    allowedFields.forEach(field => {
-        user[field] = req.body[field]
-    })
+  if (emailExists) {
+    return next(new ErrorResponse('Email is already used', 400));
+  }
 
-    let newUser = await User.createUser(user);
+  //This allowedField functionality will be useful when we will have more fields
+  const allowedFields = ['username', 'email', 'password'];
 
-    const token = await signToken(newUser.id, newUser.role, newUser.email);
+  // create users with default fields
+  let user = {
+    image: null,
+    role: 'user',
+    otp: null,
+    authTokens: [],
+  };
+  // add fields from request body
+  for (let i = 0; i < allowedFields.length; i++) {
+    user[allowedFields[i]] = req.body[allowedFields[i]];
+  }
 
-    res.status(201).json({
-      success: true,
-      data: {
-        authToken: token,
-        newUser
-      },
-    });
+  let newUser = await User.createUser(user);
+  newUser.photo = 'path/myFile.png';
+
+  const authToken = await newUser.getSignedJwtToken();
+
+  const responseUser = newUser.toObject();
+  const properties = ['authTokens', 'password', 'otp', 'resetPassword'];
+
+  for (let i = 0; i < properties.length; i++) {
+    responseUser[properties[i]] = undefined;
+  }
+
+  res.status(201).json({
+    success: true,
+    data: {
+      ...responseUser,
+      authToken,
+    },
+  });
 });
 
 module.exports.resetPassword = asyncHandler(async (req, res, next) => {
-    const { email } = req.body;
+  const { email } = req.body;
 
-    const response = await authService.resetPassword(email);
+  const user = await User.getByFieldAndUpdate(
+    { email },
+    { resetPassword: true }
+  );
 
-    res.status(200).json({
-      success: true,
-      otp: response,
-    });
+  if (!user) {
+    throw new ErrorResponse('User not found', 404);
+  }
+
+  const otp = await user.generateOTP();
+
+  // email / sms flow for sending otp to the user
+  // until then it will be sended in the response for dev purposes
+
+  await sendEmail({
+    email: email,
+    subject: 'Reset password request',
+    message: `Token: ${otp}`,
+    otp,
+  });
+
+  res.status(200).json({
+    success: true,
+  });
 });
 
 module.exports.createPassword = asyncHandler(async (req, res, next) => {
-    const { token, password } = req.body;
+  const { token, password } = req.body;
 
-    const response = await authService.createPassword(token, password);
+  const user = await User.getForCreatingPassword(token);
+  if (!user) {
+    throw new ErrorResponse('User not found', 404);
+  }
 
-    res.status(200).json({
-      success: true,
-      data: {
-        authToken: response.authToken,
-        email: response.email,
-        role: response.role,
-      },
-    });
+  const verified = await user.verifyOTP(token);
+  if (!verified) {
+    throw new ErrorResponse('Invalid token provided', 403);
+  }
+
+  user.resetPassword = undefined;
+  user.otp = undefined;
+  user.twoFactorSecret = undefined;
+  user.authTokens = [];
+
+  user.password = password;
+
+  await user.save();
+
+  const authToken = await user.getSignedJwtToken();
+  const responseUser = user.toObject();
+  const properties = ['authTokens', 'password'];
+
+  for (let i = 0; i < properties.length; i++) {
+    responseUser[properties[i]] = undefined;
+  }
+
+  res.status(200).json({
+    success: true,
+    data: {
+      ...responseUser,
+      authToken,
+    },
+  });
 });
 
 module.exports.changePassword = asyncHandler(async (req, res, next) => {
-    const { oldPassword, newPassword } = req.body;
+  const { oldPassword, newPassword } = req.body;
 
-    await authService.changePassword(oldPassword, newPassword, req.userId);
+  const user = await User.getByIdwithPassword(req.user.id, true);
 
-    res.status(200).json({
-      success: true,
-    });
+  if (!user) {
+    throw new ErrorResponse('User not found', 404);
+  }
+
+  if (oldPassword === newPassword) {
+    throw new ErrorResponse(
+      'New password cannot be the same as your old password',
+      400
+    );
+  }
+
+  const oldPasswordChecked = await User.correctPassword(
+    oldPassword,
+    user.password
+  );
+
+  if (!oldPasswordChecked) {
+    throw new ErrorResponse('Old password incorrect', 400);
+  }
+
+  user.password = newPassword;
+  await user.save();
+
+  res.status(200).json({
+    success: true,
+  });
 });
 
-const signToken = async (id, role, email) => {
-    //TODO temporary solution
-
-    let newToken = await jwt.sign({id, role, email}, process.env.JWT_SECRET, {
-        expiresIn: process.env.JWT_EXPIRE,
-    });
-
-
-    let user = await User.getUserByEmail(email);
-    let authTokens = user.authTokens;
-    authTokens.push({token: newToken})
-
-    let newUser = await User.findByIdAndUpdate(user.id, {authTokens: authTokens});
-
-    return newToken;
-};
-
 const createSendToken = (user, statusCode, res, ...tempUrl) => {
-    const token = signToken(user._id);
+  const token = signToken(user._id);
 
-    //TODO to be discussed
+  //TODO to be discussed
 
-    // const cookieOptions = {
-    //     expires: new Date(Date.now() + process.env.JWT_COOKIE_EXPIRES_IN * 24 * 60 * 60 * 1000),
-    //     httpOnly: true
-    // }
-    //
-    // //Remove password from output
-    // user.password = undefined;
-    //
-    // if(process.env.NODE_ENV === 'production') cookieOptions.secure = true
-    //
-    // res.cookie('jwt', token, cookieOptions)
+  // const cookieOptions = {
+  //     expires: new Date(Date.now() + process.env.JWT_COOKIE_EXPIRES_IN * 24 * 60 * 60 * 1000),
+  //     httpOnly: true
+  // }
+  //
+  // //Remove password from output
+  // user.password = undefined;
+  //
+  // if(process.env.NODE_ENV === 'production') cookieOptions.secure = true
+  //
+  // res.cookie('jwt', token, cookieOptions)
 
-    return token;
-}
+  return token;
+};
