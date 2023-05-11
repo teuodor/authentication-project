@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const speakeasy = require('speakeasy');
+const validator = require('validator');
 
 const roles = require('../constants/roles');
 
@@ -11,10 +12,7 @@ const UserSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Please add an email'],
       unique: true,
-      match: [
-        /[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,64}/,
-        'Please add a valid email',
-      ],
+      validate: [validator.isEmail, 'Please fill a valid email address']
     },
     password: {
       type: String,
@@ -200,6 +198,10 @@ User.getByFieldAndUpdate = async function (findQuery, updateQuery) {
   });
 
   return user;
+};
+
+User.removeAllUsers = async function() {
+  return User.deleteMany({});
 };
 
 module.exports = User;

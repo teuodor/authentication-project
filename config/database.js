@@ -1,9 +1,9 @@
 const mongoose = require('mongoose');
 
 const connectDB = async () => {
-  const DB = process.env.MONGO_URI;
+  const database = process.env.TESTING_MODE ? process.env.MONGO_URI_TESTING : process.env.MONGO_URI;
 
-  mongoose.connect(DB, {
+  mongoose.connect(database, {
     useNewUrlParser: true,
   }).then(() => console.log("DB connection successful!")).catch(err => console.log(err));
 
