@@ -1,11 +1,5 @@
 const nodemailer = require('nodemailer');
 
-const generateResetPasswordHtml = (otp) => {
-  return `<h1>RESET PASSWORD EMAIL</h1>
-    <p>Token: ${otp}</p>
-    `;
-};
-
 const sendEmail = async (options) => {
   const transporter = nodemailer.createTransport({
     service: process.env.EMAIL_SERVICE,
@@ -23,7 +17,7 @@ const sendEmail = async (options) => {
     to: options.email,
     subject: options.subject,
     text: options.message,
-    html: generateResetPasswordHtml(options.otp),
+    html: options.html,
   };
 
   console.log(await transporter.sendMail(mailOptions));

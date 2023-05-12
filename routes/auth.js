@@ -8,6 +8,7 @@ router.post('/register', authController.register);
 router.post('/password/reset', authController.resetPassword);
 router.post('/password/change', protect, authController.changePassword);
 router.patch('/password', authController.createPassword);
-
+router.post('/activate/resend', authController.resendActivationUrl);
+router.get('/activate/:token', authController.activate);
 
 module.exports = router;
