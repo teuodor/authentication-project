@@ -7,19 +7,20 @@ const server = require("../server");
 chai.use(chaiHttp);
 const apiUrl = 'http://localhost:8000/api/v1'
 
+//IMPORTANT: always run tests on testing
+if(process.env.NODE_ENV !== 'testing'){
+    return 'Env is not set to testing'
+}
+
 describe('Authentication tests', () => {
-    let server;
+    let user = {}
+    let token;
+    user.password = 'Testpa$$word123';
+
     //Drop users so we can have a clean env before testing
     before(async () => {
-        before((done) => {
-            server = app.listen(3000, () => {
-                console.log('Server started');
-                done();
-            });
-        });
-
         await User.removeAllUsers();
-    })
+    });
     /**
      * Test the REGISTER route
      */
@@ -30,13 +31,30 @@ describe('Authentication tests', () => {
                 .post('/auth/register')
                 .send({
                     email: 'test@example.com',
+                    password: user.password,
+                    role: 'user',
+                    photo: null,
+                })
+                .end((err, res) => {
+                    user = res.body.data;
+                    expect(err).to.be.null;
+                    expect(res).to.have.status(201);
+                    done();
+                });
+        });
+        //Test if the endpoint returns a 201 status code for a valid request.
+        it('should return a 400 status code if email is already used', (done) => {
+            chai.request(apiUrl)
+                .post('/auth/register')
+                .send({
+                    email: 'test@example.com',
                     password: 'Testpa$$word123',
                     role: 'user',
                     photo: null,
                 })
                 .end((err, res) => {
                     expect(err).to.be.null;
-                    expect(res).to.have.status(201);
+                    expect(res).to.have.status(400);
                     done();
                 });
         });
@@ -117,24 +135,103 @@ describe('Authentication tests', () => {
                 });
         });
     })
+
+    describe('Login user', () => {
+        //Test if the endpoint returns a 201 status code for a valid login request.
+        it('should return a 201 status code for a valid login request', (done) => {
+            chai.request(apiUrl)
+                .post('/auth/login')
+                .send({
+                    email: 'test@example.com',
+                    password: user.password,
+                    role: 'user',
+                    photo: null,
+                })
+                .end((err, res) => {
+                    user = res.body.data;
+                    expect(err).to.be.null;
+                    expect(res).to.have.status(201);
+                    done();
+                });
+        });
+        //Test if the endpoint returns a 404 status code for an invalid email.
+        it('should return a 404 status code for an invalid email', (done) => {
+            chai.request(apiUrl)
+                .post('/auth/login')
+                .send({
+                    email: 'invalid@example.com',
+                    password: user.password,
+                    role: 'user',
+                    photo: null,
+                })
+                .end((err, res) => {
+                    expect(err).to.be.null;
+                    expect(res).to.have.status(404);
+                    done();
+                });
+        });
+
+        //Test if the endpoint returns a 401 status code for an invalid password.
+        it('should return a 401 status code for an invalid password', (done) => {
+            chai.request(apiUrl)
+                .post('/auth/login')
+                .send({
+                    email: 'test@example.com',
+                    password: 'invalidPassword',
+                    role: 'user',
+                    photo: null,
+                })
+                .end((err, res) => {
+                    expect(err).to.be.null;
+                    expect(res).to.have.status(401);
+                    done();
+                });
+        });
+
+        //Test if the endpoint returns a JWT token for a valid login request.
+        it('should return a JWT token for a valid login request', (done) => {
+            chai.request(apiUrl)
+                .post('/auth/login')
+                .send({
+                    email: user.email,
+                    password: user.password,
+                    role: 'user',
+                    photo: null,
+                })
+                .end((err, res) => {
+                    expect(err).to.be.null;
+                    expect(res).to.have.status(200);
+                    expect(res.body).to.have.property('data');
+                    expect(res.body.data).to.have.property('authToken');
+                    token = res.body.data.authToken
+                    done();
+                });
+        });
+
+        //Test if the endpoint returns the correct user object for a valid login request.
+        it('should return the correct user object for a valid login request', (done) => {
+            chai.request(apiUrl)
+                .post('/auth/login')
+                .send({
+                    email: user.email,
+                    password: user.password,
+                    role: 'user',
+                    photo: null,
+                })
+                .end((err, res) => {
+                    expect(err).to.be.null;
+                    expect(res).to.have.status(200);
+                    expect(res.body).to.have.property('data');
+                    expect(res.body.data).to.have.property('email', 'test@example.com');
+                    expect(res.body.data).to.not.have.property('password');
+                    expect(res.body.data).to.not.have.property('authTokens');
+                    done();
+                });
+        });
+
+
+    })
 })
-
-
-//EXAMPLE
-// describe('{ENDPOINT CATEGORY}', () => {
-//     describe('{DESCRIBE THE ENDPOINT}', () => {
-//         it('WHAT SHOULD DO, EX: should return an array of users', (done) => {
-//             chai.request(apiUrl)
-//                 .get('{ENDPOINT}')
-//                 .end((err, res) => {
-//                     expect(err).to.be.null;
-//                     expect(res).to.have.status(401);
-//                     expect(res.body.success).to.be.false;
-//                     done();
-//                 });
-//         });
-//     });
-// })
 
 
 const expect = chai.expect;

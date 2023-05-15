@@ -50,6 +50,14 @@ UserSchema.pre('save', async function (next) {
   next();
 });
 
+// UserSchema.pre('save', function(next) {
+//   console.log('helooooooooooooo')
+//   const err = new Error('something went wronggggggggggggg');
+//   // If you call `next()` with an argument, that argument is assumed to be
+//   // an error.
+//   next(err);
+// });
+
 UserSchema.post(['findOne', 'findById', 'find'], function (docs) {
   if (Array.isArray(docs)) {
     //If docs is array it means is triggered by 'find' and return an array of docs

@@ -23,8 +23,6 @@ const handleValidationErrorDB = err =>{
     return new ErrorResponse(message, 400);
 }
 const sendErrorDev = (err, res) =>{
-    console.log('My error')
-    console.log(err)
     res.status(err.statusCode).json({
         status: err.status,
         error: err,
@@ -57,7 +55,7 @@ module.exports = (err, req, res, next)=>{
     err.statusCode = err.statusCode || 500;
     err.status = err.status  || 'error';
 
-    let error = {...err};
+    let error = Object.assign(err)
     error.name = err.name;
     error.code = err.code;
     error.errmsg = err.errmsg;
@@ -68,9 +66,10 @@ module.exports = (err, req, res, next)=>{
     if(error.name === 'JsonWebTokenError') error = handleJWTError();
     if(error.name === 'TokenExpiredError') error = handleJWTExpiredError();
 
+
     if(process.env.NODE_ENV === 'development'){
         sendErrorDev(err, res);
-    }else if(process.env.NODE_ENV === 'production'){
+    }else if(process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'testing'){
         sendErrorProd(error, res);
     }
 }
