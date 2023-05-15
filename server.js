@@ -28,3 +28,5 @@ const server = app.listen(PORT, () => {
     `AuthApp API running in ${process.env.NODE_ENV} mode on port ${PORT}`
   );
 });
+
+module.exports = server;

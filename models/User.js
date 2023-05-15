@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const speakeasy = require('speakeasy');
+const validator = require('validator');
 
 const roles = require('../constants/roles');
 
@@ -11,10 +12,7 @@ const UserSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Please add an email'],
       unique: true,
-      match: [
-        /[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,64}/,
-        'Please add a valid email',
-      ],
+      validate: [validator.isEmail, 'Please fill a valid email address']
     },
     password: {
       type: String,
@@ -51,6 +49,14 @@ UserSchema.pre('save', async function (next) {
   await this.setPassword(this.password);
   next();
 });
+
+// UserSchema.pre('save', function(next) {
+//   console.log('helooooooooooooo')
+//   const err = new Error('something went wronggggggggggggg');
+//   // If you call `next()` with an argument, that argument is assumed to be
+//   // an error.
+//   next(err);
+// });
 
 UserSchema.post(['findOne', 'findById', 'find'], function (docs) {
   if (Array.isArray(docs)) {
@@ -200,6 +206,10 @@ User.getByFieldAndUpdate = async function (findQuery, updateQuery) {
   });
 
   return user;
+};
+
+User.removeAllUsers = async function() {
+  return User.deleteMany({});
 };
 
 module.exports = User;

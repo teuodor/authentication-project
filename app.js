@@ -28,8 +28,6 @@ app.use(mongoSanitize());
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRouter);
 
-app.use(errorHandler);
-
 app.enable('trust proxy');
 
 app.all("*", (req, res, next) => {
@@ -37,5 +35,6 @@ app.all("*", (req, res, next) => {
 });
 
 app.use(globalErrorHandler);
+app.use(errorHandler);
 
 module.exports = app;
