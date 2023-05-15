@@ -1,6 +1,5 @@
 const asyncHandler = require('../middlewares/async');
 const decodeToken = require('../utils/decodeToken');
-const authService = require('../services/auth');
 const User = require('../models/User');
 const ErrorResponse = require('../utils/errorResponse');
 const uploadFeatures = require('../utils/upload');

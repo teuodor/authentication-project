@@ -38,6 +38,15 @@ const UserSchema = new mongoose.Schema(
       default: false,
       select: false,
     },
+    active: {
+      type: Boolean,
+      default: false,
+      select: false,
+    },
+    lastActivationRequest: {
+      type: Date,
+      select: false,
+    },
   },
   { timestamps: true, versionKey: false }
 );
@@ -74,7 +83,7 @@ UserSchema.post(['findOne', 'findById', 'find'], function (docs) {
 });
 
 //JWT functions
-UserSchema.methods.getSignedJwtToken = async function () {
+UserSchema.methods.getAuthToken = async function () {
   const token = jwt.sign(
     { id: this._id, role: this.role, email: this.email },
     process.env.JWT_SECRET,
@@ -85,6 +94,14 @@ UserSchema.methods.getSignedJwtToken = async function () {
 
   this.authTokens.push(token);
   await this.save();
+
+  return token;
+};
+
+UserSchema.methods.getSignedJwtToken = async function () {
+  const token = jwt.sign({ id: this._id }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRE_ACTIVE,
+  });
 
   return token;
 };
@@ -122,6 +139,21 @@ UserSchema.methods.verifyOTP = async function (otp) {
   });
 };
 
+UserSchema.methods.activate = async function () {
+  this.lastActivationRequest = null;
+  this.active = true;
+  this.save();
+};
+
+UserSchema.methods.setLastActivationRequest = async function () {
+  this.lastActivationRequest = Date.now();
+  this.save();
+};
+
+UserSchema.methods.checkActive = async function () {
+  return this.active === true;
+};
+
 //User schema declaration
 const User = mongoose.model('User', UserSchema);
 
@@ -146,9 +178,19 @@ User.correctPassword = async function (candidatePassword, userPassword) {
 User.getAllUsers = async function () {
   return await this.find();
 };
-User.getByEmail = async function (email) {
+User.getByEmail = async function (
+  email,
+  withPassword = false,
+  withAuthTokens = false,
+  withActive = false,
+  withLastActivationRequest = false
+) {
   return await this.findOne({ email: email.toLowerCase() }).select(
-    '+password +authTokens'
+    `${withPassword ? '+password ' : ''}${
+      withAuthTokens ? '+authTokens ' : ''
+    }${withActive ? '+active ' : ''}${
+      withLastActivationRequest ? '+lastActivationRequest ' : ''
+    }`
   );
 };
 
@@ -156,16 +198,20 @@ User.getByUsername = async function (username) {
   return await this.findOne({ username: username.toLowerCase() });
 };
 
-User.getByIdwithPassword = async function (userId, withPassword = false) {
-  return withPassword
-    ? await this.findById(userId).select('+password')
-    : await this.findById(userId);
-};
-
-User.getByIdwithAuthTokens = async function (userId, withAuthTokens = false) {
-  return withAuthTokens
-    ? await this.findById(userId).select('+authTokens')
-    : await this.findById(userId);
+User.getById = async function (
+  userId,
+  withPassword = false,
+  withAuthTokens = false,
+  withActive = false,
+  withLastActivationRequest = false
+) {
+  return await this.findById(userId).select(
+    `${withPassword ? '+password ' : ''}${
+      withAuthTokens ? '+authTokens ' : ''
+    }${withActive ? '+active ' : ''}${
+      withLastActivationRequest ? '+lastActivationrequest ' : ''
+    }`
+  );
 };
 
 User.getForCreatingPassword = async function (otp) {

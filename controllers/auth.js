@@ -3,11 +3,16 @@ const asyncHandler = require('../middlewares/async');
 const User = require('../models/User');
 const ErrorResponse = require('../utils/errorResponse');
 const sendEmail = require('../utils/sendEmail');
+const path = require('path');
+const {
+  generateResetPasswordHtml,
+  generateActivateUserHtml,
+} = require('../utils/generateHtml');
 
 module.exports.login = asyncHandler(async (req, res, next) => {
   const { email, password } = req.body;
 
-  const user = await User.getByEmail(email);
+  const user = await User.getByEmail(email, true, true, true, false);
 
   if (!user) {
     throw new ErrorResponse('User not found', 404);
@@ -19,9 +24,19 @@ module.exports.login = asyncHandler(async (req, res, next) => {
     throw new ErrorResponse('Invalid credentials', 401);
   }
 
-  const authToken = await user.getSignedJwtToken();
+  const checkActiveUser = await user.checkActive();
+  if (!checkActiveUser) {
+    throw new ErrorResponse('Not active, please activate first', 404);
+  }
+
+  const authToken = await user.getAuthToken();
   const responseUser = user.toObject();
-  const properties = ['authTokens', 'password'];
+  const properties = [
+    'authTokens',
+    'password',
+    'active',
+    'lastActivationRequest',
+  ];
 
   for (let i = 0; i < properties.length; i++) {
     responseUser[properties[i]] = undefined;
@@ -40,7 +55,7 @@ module.exports.logout = asyncHandler(async (req, res, next) => {
   const userId = req.user.id;
   const authToken = req.headers.authorization.split(' ')[1];
 
-  const user = await User.getByIdwithAuthTokens(userId, true);
+  const user = await User.getById(userId, false, true);
 
   if (!user) {
     throw new ErrorResponse('User not found', 404);
@@ -57,7 +72,9 @@ module.exports.logout = asyncHandler(async (req, res, next) => {
 });
 
 module.exports.register = asyncHandler(async (req, res, next) => {
-  if (!req.body.email) {
+  const email = req.body.email.toLowerCase();
+
+  if (!email) {
     return next(new ErrorResponse('Provide an email', 400));
   }
 
@@ -85,22 +102,22 @@ module.exports.register = asyncHandler(async (req, res, next) => {
   }
 
   let newUser = await User.createUser(user);
-  newUser.photo = 'path/myFile.png';
 
-  const authToken = await newUser.getSignedJwtToken();
+  const token = await newUser.getSignedJwtToken();
 
-  const responseUser = newUser.toObject();
-  const properties = ['authTokens', 'password', 'otp', 'resetPassword'];
-
-  for (let i = 0; i < properties.length; i++) {
-    responseUser[properties[i]] = undefined;
-  }
+  const urlToActivate = process.env.HOST + '/auth/activate/' + token;
+  await sendEmail({
+    email: email,
+    subject: 'Activate user request',
+    message: `Activate user link: ${urlToActivate}`,
+    html: generateActivateUserHtml(urlToActivate),
+  });
+  await newUser.setLastActivationRequest();
 
   res.status(201).json({
     success: true,
     data: {
-      ...responseUser,
-      authToken,
+      urlToActivate,
     },
   });
 });
@@ -126,7 +143,7 @@ module.exports.resetPassword = asyncHandler(async (req, res, next) => {
     email: email,
     subject: 'Reset password request',
     message: `Token: ${otp}`,
-    otp,
+    html: generateResetPasswordHtml(otp),
   });
 
   res.status(200).json({
@@ -156,7 +173,7 @@ module.exports.createPassword = asyncHandler(async (req, res, next) => {
 
   await user.save();
 
-  const authToken = await user.getSignedJwtToken();
+  const authToken = await user.getAuthToken();
   const responseUser = user.toObject();
   const properties = ['authTokens', 'password'];
 
@@ -176,7 +193,7 @@ module.exports.createPassword = asyncHandler(async (req, res, next) => {
 module.exports.changePassword = asyncHandler(async (req, res, next) => {
   const { oldPassword, newPassword } = req.body;
 
-  const user = await User.getByIdwithPassword(req.user.id, true);
+  const user = await User.getById(req.user.id, true);
 
   if (!user) {
     throw new ErrorResponse('User not found', 404);
@@ -225,3 +242,63 @@ const createSendToken = (user, statusCode, res, ...tempUrl) => {
 
   return token;
 };
+
+module.exports.activate = asyncHandler(async (req, res, next) => {
+  const { token } = req.params;
+  if (!token) {
+    res.sendFile(path.join(__dirname, '../static/activateError.html'));
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET, async (err, decoded) => {
+    console.log(decoded.id);
+    if (err) {
+      res.sendFile(path.join(__dirname, '../static/activateError.html'));
+    } else {
+      const user = await User.getById(decoded.id, false, false, true, true);
+      if (!user || user.active) {
+        res.sendFile(path.join(__dirname, '../static/activateError.html'));
+        return;
+      }
+
+      await user.activate();
+      res.sendFile(path.join(__dirname, '../static/activateSuccess.html'));
+    }
+  });
+});
+
+module.exports.resendActivationUrl = asyncHandler(async (req, res, next) => {
+  const { email } = req.body;
+  const user = await User.getByEmail(email, false, false, false, true);
+
+  if (!user) {
+    throw new ErrorResponse('User not found', 404);
+  }
+
+  if (user.lastActivationRequest) {
+    const lastActivationDateInMinutes = Math.floor(
+      (Date.now() - user.lastActivationRequest) / (1000 * 60)
+    );
+    if (lastActivationDateInMinutes < 5) {
+      throw new ErrorResponse(
+        `You already requested a new activation link less than 5 minutes ago`,
+        401
+      );
+    }
+  }
+
+  const token = await user.getSignedJwtToken();
+  const urlToActivate = process.env.HOST + '/auth/activate/' + token;
+
+  await sendEmail({
+    email: email,
+    subject: 'Activate user request',
+    message: `Activate user link: ${urlToActivate}`,
+    html: generateActivateUserHtml(urlToActivate),
+  });
+  await user.setLastActivationRequest();
+
+  res.status(200).json({
+    success: true,
+    urlToActivate,
+  });
+});
