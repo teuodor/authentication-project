@@ -4,8 +4,9 @@ const User = require("../models/User");
 const asyncHandler = require("../middlewares/async");
 const app = require("../app");
 const server = require("../server");
+const log = require('../utils/logsChalk');
 chai.use(chaiHttp);
-const apiUrl = 'http://localhost:8000/api/v1'
+const apiUrl = 'http://localhost:3000/api/v1'
 
 //IMPORTANT: always run tests on testing
 if(process.env.NODE_ENV !== 'testing'){
@@ -13,9 +14,12 @@ if(process.env.NODE_ENV !== 'testing'){
 }
 
 describe('Authentication tests', () => {
-    let user = {}
-    let token;
-    user.password = 'Testpa$$word123';
+    let user = {};
+    let authToken;
+    let urlToActivate;
+    let tokenToActivate;
+    let validPassword = 'Testpa$$word123';
+    console.log(user.password)
 
     //Drop users so we can have a clean env before testing
     before(async () => {
@@ -31,12 +35,15 @@ describe('Authentication tests', () => {
                 .post('/auth/register')
                 .send({
                     email: 'test@example.com',
-                    password: user.password,
+                    password: validPassword,
                     role: 'user',
                     photo: null,
                 })
                 .end((err, res) => {
-                    user = res.body.data;
+                    user = res.body.data.user;
+                    tokenToActivate = res.body.data.tokenToActivate;
+                    urlToActivate = res.body.data.urlToActivate;
+                    user.password = validPassword;
                     expect(err).to.be.null;
                     expect(res).to.have.status(201);
                     done();
@@ -136,21 +143,72 @@ describe('Authentication tests', () => {
         });
     })
 
+    describe('Activate user', () => {
+        //Test if the endpoint returns a 200 status code and contains successful keyword for a valid activation url
+        it('should contain successful keyword for a valid activation url', (done) => {
+            chai.request(apiUrl)
+                .get(`/auth/activate/${tokenToActivate}`)
+                .end((err, res) => {
+                    expect(err).to.be.null;
+                    expect(res).to.have.status(200);
+                    expect(res.text).to.contains('successful');
+                    done();
+                });
+        });
+        //Test if the endpoint returns a 200 status code and contains failed keyword for an invalid activation url
+        it('should contain failed keyword for a invalid activation url', (done) => {
+            chai.request(apiUrl)
+                .get(`/auth/activate/${tokenToActivate} + asd123d412d121`)
+                .end((err, res) => {
+                    expect(err).to.be.null;
+                    expect(res).to.have.status(200);
+                    expect(res.text).to.contains('failed');
+                    done();
+                });
+        });
+        //Test if the endpoint returns a 200 status code for a valid user
+        it('should return a 200 status code for a valid request with a valid user', (done) => {
+            chai.request(apiUrl)
+                .post('/auth/activate/resend')
+                .send({
+                    email: user.email,
+                })
+                .end((err, res) => {
+                    console.log(res)
+                    expect(err).to.be.null;
+                    expect(res).to.have.status(200);
+                    done();
+                });
+        });
+        //Test if the endpoint returns a 401 status code if user already resend activation email
+        it('should return a 401 status code if user already already resend activation email', (done) => {
+            chai.request(apiUrl)
+                .post(`/auth/activate/resend`)
+                .send({
+                    email: user.email,
+                })
+                .end((err, res) => {
+                    expect(err).to.be.null;
+                    expect(res).to.have.status(401);
+                    done();
+                });
+        });
+    })
+
     describe('Login user', () => {
         //Test if the endpoint returns a 201 status code for a valid login request.
-        it('should return a 201 status code for a valid login request', (done) => {
+        it('should return a 200 status code for a valid login request', (done) => {
+            console.log(user.password)
             chai.request(apiUrl)
                 .post('/auth/login')
                 .send({
                     email: 'test@example.com',
-                    password: user.password,
-                    role: 'user',
-                    photo: null,
+                    password: user.password
                 })
                 .end((err, res) => {
-                    user = res.body.data;
+                    // user = res.body.data;
                     expect(err).to.be.null;
-                    expect(res).to.have.status(201);
+                    expect(res).to.have.status(200);
                     done();
                 });
         });
@@ -203,7 +261,7 @@ describe('Authentication tests', () => {
                     expect(res).to.have.status(200);
                     expect(res.body).to.have.property('data');
                     expect(res.body.data).to.have.property('authToken');
-                    token = res.body.data.authToken
+                    authToken = res.body.data.authToken
                     done();
                 });
         });

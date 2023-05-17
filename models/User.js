@@ -16,7 +16,7 @@ const UserSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      minlength: 8,
+      minlength: [8, 'Password is too short'],
       select: false,
       match: [
         /^(?=.{8,})(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^\w\d]).*$/,

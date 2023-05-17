@@ -12,6 +12,10 @@ const {
 module.exports.login = asyncHandler(async (req, res, next) => {
   const { email, password } = req.body;
 
+  if(!email || !password){
+    throw new ErrorResponse('Invalid email or password', 401);
+  }
+
   const user = await User.getByEmail(email, true, true, true, false);
 
   if (!user) {
@@ -26,7 +30,7 @@ module.exports.login = asyncHandler(async (req, res, next) => {
 
   const checkActiveUser = await user.checkActive();
   if (!checkActiveUser) {
-    throw new ErrorResponse('Not active, please activate first', 404);
+    throw new ErrorResponse('Not active, please activate first', 400);
   }
 
   const authToken = await user.getAuthToken();
@@ -72,15 +76,15 @@ module.exports.logout = asyncHandler(async (req, res, next) => {
 });
 
 module.exports.register = asyncHandler(async (req, res, next) => {
-  const email = req.body.email.toLowerCase();
+  let email = req.body.email;
 
   if (!email) {
     return next(new ErrorResponse('Provide an email', 400));
   }
 
-  req.body.email = req.body.email.toLowerCase();
+  email = req.body.email.toLowerCase();
 
-  let emailExists = await User.checkEmailExists(req.body.email);
+  let emailExists = await User.checkEmailExists(email);
 
   if (emailExists) {
     return next(new ErrorResponse('Email is already used', 400));
@@ -112,13 +116,19 @@ module.exports.register = asyncHandler(async (req, res, next) => {
     message: `Activate user link: ${urlToActivate}`,
     html: generateActivateUserHtml(urlToActivate),
   });
-  await newUser.setLastActivationRequest();
+
+  let data= {
+        user: newUser
+  };
+
+  if(process.env.NODE_ENV === 'testing'){
+    data.urlToActivate = urlToActivate;
+    data.tokenToActivate = token
+  }
 
   res.status(201).json({
     success: true,
-    data: {
-      urlToActivate,
-    },
+    data: data
   });
 });
 
@@ -250,7 +260,6 @@ module.exports.activate = asyncHandler(async (req, res, next) => {
   }
 
   jwt.verify(token, process.env.JWT_SECRET, async (err, decoded) => {
-    console.log(decoded.id);
     if (err) {
       res.sendFile(path.join(__dirname, '../static/activateError.html'));
     } else {
@@ -269,9 +278,14 @@ module.exports.activate = asyncHandler(async (req, res, next) => {
 module.exports.resendActivationUrl = asyncHandler(async (req, res, next) => {
   const { email } = req.body;
   const user = await User.getByEmail(email, false, false, false, true);
+  let responseMessage= 'You should receive an activation URL if there is an account with this email.'
 
   if (!user) {
-    throw new ErrorResponse('User not found', 404);
+    res.status(200).json({
+      success: true,
+      responseMessage
+    });
+    return;
   }
 
   if (user.lastActivationRequest) {
